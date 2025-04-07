@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: contacts.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: contacts.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Handles initial page load setup by hiding the loader and fetching necessary CSRF token and contact data.
+ */
+document.addEventListener('DOMContentLoaded', async function() {
+    hideLoader();
+    await getCsrfToken();
+    await fetchAndDisplayContacts();
+});
+
+/**
+ * Retrieves a CSRF token from the server configuration.
+ * @returns {Promise&lt;string>} A promise that resolves to the CSRF token string.
+ */
+async function getCsrfToken() {
+    let apiUrl = await importConfig();
+    let fetchUrl = `${apiUrl}/api/form`;
+    const csrfResponse = await fetch(fetchUrl, {
+        credentials: 'include'
+    });
+    const csrfData = await csrfResponse.json();
+    return csrfData.csrfToken;
+}
+
+/**
+ * Fetches CSRF token and performs a backend fetch operation using a provided URL.
+ * @param {string} fetchUrl - The URL to fetch from the backend.
+ * @returns {Promise&lt;Response>} A promise that resolves to the response of the fetch operation.
+ */
+async function fetchToBackend(fetchUrl) {
+    const csrfToken = await getCsrfToken();
+    let response = await fetch(fetchUrl, {
+        method: 'GET',
+        headers: {'Content-Type': 'application/json','CSRF-Token': csrfToken,'Authorization': `Bearer ${localStorage.getItem('token')}`},
+        credentials: 'include',
+    });
+    return response;
+}
+
+/**
+ * Fetches and displays contacts by retrieving the CSRF token and making an API request to get contacts.
+ * @returns {Promise&lt;void>} A promise that resolves when the contacts have been fetched and displayed.
+ */
+async function fetchAndDisplayContacts() {
+    const csrfToken = await getCsrfToken();
+    try {
+        let apiUrl = await importConfig();
+        let fetchUrl = `${apiUrl}/api/contacts`;
+        const response = await fetchToBackend(fetchUrl);
+        if (!response.ok) {
+            throw new Error('Failed to fetch contacts');
+        }
+        const contacts = await response.json();
+        processAndDisplayContacts(contacts);
+    } catch (error) {
+        console.error('Error fetching contacts:', error);
+        document.getElementById('contact-list').innerHTML = '&lt;p>Error loading contacts.&lt;/p>';
+    }
+}
+
+/**
+ * Processes and displays sorted contact data in the UI.
+ * @param {Array} contacts - Array of contact objects to process and display.
+ * @returns {void}
+ */
+function processAndDisplayContacts(contacts) {
+    const sortedContacts = Object.values(contacts).sort((a, b) => a.firstName.localeCompare(b.firstName)); // Sortieren nach firstName
+    filterAndRenderContacts(sortedContacts);
+}
+
+/**
+ * Filters and renders contact entries grouped by the first letter of their first name.
+ * @param {Array} sortedContacts - The sorted list of contact objects.
+ * @returns {void}
+ */
+function filterAndRenderContacts(sortedContacts) {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    let contactSection = document.getElementById('contact-list');
+    contactSection.innerHTML = '';
+
+    letters.forEach(letter => {
+        const filteredContacts = sortedContacts.filter(contact => contact.firstName.toUpperCase().startsWith(letter));
+        if (filteredContacts.length > 0) {
+            renderLetterSection(filteredContacts, letter);
+        }
+    });
+}
+
+/**
+ * Renders a section in the UI for contacts starting with the same letter.
+ * @param {Array} contacts - List of contacts to render under a specific letter section.
+ * @param {string} letter - The letter used to group the contacts.
+ * @returns {void}
+ */
+function renderLetterSection(contacts, letter) {
+    let letterSection = document.createElement('div');
+    letterSection.className = 'letter-section';
+    letterSection.innerHTML = `&lt;div class="first-char">${letter}&lt;/div>`;
+    contacts.forEach(contact => {
+        letterSection.appendChild(createContactElement(contact));
+    });
+    document.getElementById('contact-list').appendChild(letterSection);
+}
+
+/**
+ * Creates a DOM element representing a single contact.
+ * @param {Object} contact - Contact object containing data to populate the UI.
+ * @returns {HTMLElement} The DOM element created for the contact.
+ */
+function createContactElement(contact) {
+    let firstNameLetter = contact.firstName.charAt(0).toUpperCase();
+    let lastNameLetter = contact.lastName.charAt(0).toUpperCase();
+    let contactElement = document.createElement('div');
+    contactElement.className = 'contact-entry';
+    contactElement.innerHTML = `
+        &lt;div class="same-letters">
+        &lt;div onclick="showContactDetails('${contact.id}')" id="contact-card-${contact.id}" class="contact-card">
+        &lt;div id="contact-img-${contact.id}" class="contact-img" style="background-color: ${contact.color};">${firstNameLetter}${lastNameLetter}&lt;/div>
+        &lt;div id="contactInfo-${contact.id}" class="contact-info">
+            &lt;span>${contact.firstName} ${contact.lastName}&lt;/span>
+            &lt;p>${contact.email}&lt;/p>
+        &lt;/div>
+    `;
+    return contactElement;
+}
+
+/**
+ * Displays detailed information for a specific contact.
+ * @param {string} contactId - The unique identifier for the contact.
+ * @returns {Promise&lt;void>} A promise that resolves when the contact details are displayed.
+ */
+async function showContactDetails(contactId) {
+    try {
+        let apiUrl = await importConfig();
+        let fetchUrl = `${apiUrl}/api/contact/${contactId}`;
+        const response = await fetchToBackend(fetchUrl);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch contact details');
+        }
+
+        const contactDetails = await response.json();
+        renderContactDetails(contactDetails);
+        document.getElementById('mobile-contact-details-popup').classList.remove('d-none');
+    } catch (error) {
+        console.error('Error fetching contact details:', error);
+        document.getElementById('contact-details').innerHTML = '&lt;p>Error loading contact details.&lt;/p>';
+    }
+}
+
+/**
+ * Initiates the contact editing process by fetching contact details and displaying them in a form for editing.
+ * @param {string} contactId - The unique identifier for the contact to edit.
+ * @returns {Promise&lt;void>} A promise that resolves when the edit form is displayed with the contact's current details.
+ */
+async function editContact(contactId) {
+    try {
+        let apiUrl = await importConfig();
+        const csrfToken = await getCsrfToken();
+        
+        let fetchUrl = `${apiUrl}/api/contact/${contactId}`;
+        const response = await fetchToBackend(fetchUrl);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch contact details: ${response.statusText}`);
+        }
+
+        const contactDetails = await response.json();
+
+        // Anzeige eines Bearbeitungsformulars mit den Kontaktdetails
+        let editFormHtml = `
+                            &lt;div class="edit-input" style="margin-top: 20px;">
+                                &lt;label for="firstName">First Name:&lt;/label>
+                                &lt;input type="text" id="firstName" name="firstName" value="${contactDetails.firstName}">
+                            &lt;/div>
+                            &lt;div class="edit-input">
+                                &lt;label for="lastName">Last Name:&lt;/label>
+                                &lt;input type="text" id="lastName" name="lastName" value="${contactDetails.lastName}">
+                            &lt;/div>
+                            &lt;div class="edit-input">
+                                &lt;label for="email">Email:&lt;/label>
+                                &lt;input type="email" id="email" name="email" value="${contactDetails.email}">
+                            &lt;/div>
+                            &lt;div class="edit-input">
+                                &lt;label for="phone">Phone:&lt;/label>
+                                &lt;input type="tel" id="phone" name="phone" value="${contactDetails.phone}">
+                            &lt;/div>
+                            &lt;div class="edit-input">
+                                &lt;label for="color">Profil color:&lt;/label>
+                                &lt;input type="color" id="color" name="color" value="${contactDetails.color}">
+                            &lt;/div>
+                            &lt;div class="add-contact-buttons">
+                                &lt;button class="btn-cancel" type="button" onclick="closeEditPopup()">Cancel X&lt;/button>
+                                &lt;button class="btn-create" type="button" onclick="saveContact('${contactDetails.id}')">Save&lt;/button>
+                            &lt;/div>
+        `;
+
+        document.getElementById('edit-contact-form').innerHTML = editFormHtml;
+
+        document.getElementById('to-edit-contact').innerHTML = `Edit contact ${contactDetails.firstName} ${contactDetails.lastName}`;
+
+        // Öffnen des Popups
+        document.getElementById('edit-contact-popup').classList.remove('d-none');
+        document.getElementById('edit-contact-popup').style.display = 'block';
+    } catch (error) {
+        console.error('Error fetching contact details for editing:', error);
+        document.getElementById('contact-details').innerHTML = '&lt;p>Error loading contact details for editing.&lt;/p>';
+    }
+}
+
+/**
+ * Displays a popup for adding a new contact.
+ * @returns {Promise&lt;void>} A promise that resolves when the popup is displayed.
+ */
+async function addNewContact() {
+    document.getElementById('add-contact-popup').classList = 'modal';
+    document.getElementById('add-contact-popup').style.display = 'flex';
+    document.getElementById('add-new-contact-btn').style.display = "none";
+}
+
+/**
+ * Saves a new contact to the backend after collecting form data.
+ * @returns {Promise&lt;void>} A promise that resolves when the new contact is successfully saved and displayed.
+ */
+async function saveNewContact() {
+    const contactDetails = {
+        firstName: document.getElementById('newfirstName').value,
+        lastName: document.getElementById('newlastName').value,
+        phone: document.getElementById('newphone').value,
+        email: document.getElementById('newemail').value,
+        color: document.getElementById('color').value
+    };
+
+    try {
+        let apiUrl = await importConfig();
+        const csrfToken = await getCsrfToken();
+        
+        let fetchUrl = `${apiUrl}/api/add-contact`;
+        const response = await fetch(fetchUrl, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json','CSRF-Token': csrfToken,'Authorization': `Bearer ${localStorage.getItem('token')}`},
+            credentials: 'include',
+            body: JSON.stringify(contactDetails)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Fehler beim Hinzufügen des Kontakts: ${response.statusText}`);
+        }
+
+        const responseData = await response.json();
+        console.log('Contact successfully added:', responseData);
+        await fetchAndDisplayContacts();
+        document.getElementById('newfirstName').value = '';
+        document.getElementById('newlastName').value = '';
+        document.getElementById('newphone').value = '';
+        document.getElementById('newemail').value = '';
+        document.getElementById('color').value = '';
+        closeEditPopup();
+    } catch (error) {
+        console.error('Error while adding new contact:', error);
+        // document.getElementById('contact-details').innerHTML = '&lt;p>Fehler beim Hinzufügen der Kontaktdetails.&lt;/p>';
+    }
+}
+
+/**
+ * Saves updates to an existing contact's details to the backend.
+ * @param {string} contactId - The unique identifier for the contact being updated.
+ * @returns {Promise&lt;void>} A promise that resolves when the contact's details have been updated.
+ */
+async function saveContact(contactId) {
+    try {
+        let apiUrl = await importConfig();
+        const csrfToken = await getCsrfToken();
+
+        let updatedContact = {
+            firstName: document.getElementById('firstName').value,
+            lastName: document.getElementById('lastName').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value,
+            color: document.getElementById('color').value
+        };
+
+        // Überprüfe, ob eine Datei zum Hochladen ausgewählt wurde
+        let fileInput = document.getElementById('fileupload');
+        if (fileInput.files.length > 0) {
+            let formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+            formData.append('contactId', contactId); // Füge die Kontakt-ID hinzu
+
+            // Sende das Bild an den Server
+            let imageUploadUrl = `${apiUrl}/api/upload-image`;
+            const imageUploadResponse = await fetch(imageUploadUrl, {
+                method: 'POST',
+                headers: {'CSRF-Token': csrfToken,'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                credentials: 'include',
+                body: formData
+            });
+
+            if (!imageUploadResponse.ok) {
+                throw new Error('Failed to upload image');
+            }
+
+            const imageUploadData = await imageUploadResponse.json();
+            updatedContact.imageUrl = imageUploadData.filePath; // Füge den Bildpfad zu den Kontaktinformationen hinzu
+        }
+
+        let fetchUrl = `${apiUrl}/api/contact/${contactId}`;
+        const response = await fetch(fetchUrl, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json','CSRF-Token': csrfToken,'Authorization': `Bearer ${localStorage.getItem('token')}`},
+            credentials: 'include',
+            body: JSON.stringify(updatedContact)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save contact');
+        }
+
+        // Popup schließen und Kontaktinformationen neu laden
+        closeEditPopup();
+        let contactImg = 'contact-img-' + contactId;
+        document.getElementById(contactImg).style.backgroundColor = document.getElementById('color').value;
+        await showContactDetails(contactId);
+    } catch (error) {
+        console.error('Error saving contact:', error);
+        document.getElementById('contact-details').innerHTML = '&lt;p>Error saving contact details.&lt;/p>';
+    }
+}
+
+/**
+ * Closes the edit popup and optionally refreshes the list of displayed contacts.
+ * @returns {void}
+ */
+function closeEditPopup() {
+    document.getElementById('edit-contact-popup').classList.add('d-none');
+    document.getElementById('edit-contact-popup').style.display = 'none';
+    document.getElementById('add-contact-popup').classList.add('d-none');
+    document.getElementById('add-contact-popup').style.display = 'none';
+    document.getElementById('add-new-contact-btn').style.display = "flex";
+}
+
+/**
+ * Closes the contacts detail popup.
+ * @returns {void}
+ */
+function closeContactsPopup() {
+    document.getElementById('mobile-contact-details-popup').classList = 'd-none';
+    document.getElementById('mobile-contact-details-popup').style.display = 'none !important';
+    document.getElementById('contact-details-modal').classList.add('d-none');
+    document.getElementById('contact-details-modal').style.display = 'none !important';
+    document.getElementById('save-contact').style.display = "none";
+}
+
+/**
+ * Renders the detailed view of a contact's information.
+ * @param {Object} details - Detailed information about the contact.
+ * @returns {void}
+ */
+function renderContactDetails(details) {
+    document.getElementById('contact-details').innerHTML = `
+            &lt;div class="contact-header">
+                &lt;div id="initials-picture-${details.id}" class="initials" style="background-color: ${details.color}">${details.initials}&lt;/div>
+                &lt;div>
+                    &lt;span>${details.firstName} ${details.lastName}&lt;/span>
+                    &lt;div class="action-buttons">
+                        &lt;div onclick="editContact('${details.id}')">&lt;img alt="edit contact" src="./assets/img/edit.png">&lt;/div>
+                        &lt;div onclick="deleteContact('${details.id}')">&lt;img alt="edit contact" src="./assets/img/delete.png">&lt;/div>
+                    &lt;/div>
+                &lt;/div>
+            &lt;/div>
+            &lt;div>
+                &lt;h2>Contact information&lt;/h2>
+                &lt;div>
+                    &lt;p>&lt;b>Email&lt;/b>&lt;/p>
+                    &lt;p>&lt;a href="mailto:${details.email}">${details.email}&lt;/a>&lt;/p>
+                    &lt;p>&lt;b>Phone&lt;/b>&lt;/p>
+                    &lt;p>&lt;a href="tel:${details.phone}">${details.phone}&lt;/a>&lt;/p>
+                &lt;/div>
+            &lt;/div>
+        &lt;/div>
+    `;
+    let imagePath = `./../assets/contacts/${details.id}/profile.jpg`;
+    let img = new Image();
+    img.src = imagePath;
+    img.onload = function() {
+        let id = 'initials-picture-' + details.id;
+        document.getElementById(id).innerHTML = `&lt;img id="profile-picture-${details.id}" src="${imagePath}" alt="Profile picture" class="profile-img">`;
+        document.body.style.display = 'flex';
+    }
+    img.onerror = function() {
+        let id = 'initials-picture-' + details.id;
+        let initials = `${details.firstName.charAt(0)}${details.lastName.charAt(0)}`.toUpperCase();
+        document.getElementById(id).innerHTML = initials;
+        document.body.style.display = 'block';
+    }
+        
+// &lt;div class="d-none modal"id=mobile-contact-details-popup onclick=closeContactsPopup()>&lt;div class=modal-content id=contact-details-modal onclick=event.stopPropagation()>&lt;div class=headline-index-contact id=contact-headline-mobile>&lt;h1>Contacts&lt;/h1>&lt;img src=./assets/img/headline-bar.png id=headline-bar>&lt;text>Better with a team&lt;/text>&lt;/div>&lt;div onclick=closeContactsPopup() id=closeContactsPopup>&lt;img src=./assets/img/blue-arrow-left.png>&lt;/div>&lt;div class=contact-header>&lt;div class=initials style=background-color:{};>${details.initials}&lt;/div>&lt;div>&lt;span>${details.firstName} ${details.lastName}&lt;/span>&lt;/div>&lt;/div>&lt;div class=mobile-contact-details>&lt;h2>Contact information&lt;/h2>&lt;div>&lt;p>&lt;b>Email&lt;/b>&lt;p id=popup-mail>&lt;a href=mailto:${details.email}>${details.email}&lt;/a>&lt;p>&lt;b>Phone&lt;/b>&lt;p id=popup-phone>&lt;a href=tel:${details.phone}>${details.phone}&lt;/a>&lt;/div>&lt;/div>&lt;div onclick=showContactActions() id=mobile-action-button>&lt;p>...&lt;/div>&lt;div class=modal-backdrop onclick=closeContactsPopup(${details.id})>&lt;div class=d-none id=mobile-action-button-options>&lt;div onclick='editContact("${details.id}")'>&lt;img src=./assets/img/edit.png alt="edit contact">&lt;/div>&lt;div onclick='deleteContact("${details.id}")'>&lt;img src=./assets/img/delete.png alt="edit contact">&lt;/div>&lt;/div>&lt;/div>&lt;/div>
+    document.getElementById('contactDetailsPopup').innerHTML = `
+            &lt;div id="mobile-contact-details-popup" class="modal d-none" onclick="closeContactsPopup()">
+            	&lt;div id="contact-details-modal" class="modal-content" onclick="event.stopPropagation()">
+                    &lt;div id="contact-headline-mobile" class="headline-index-contact">
+                        &lt;h1>Contacts&lt;/h1>
+                        &lt;img id="headline-bar" src="./assets/img/headline-bar.png">
+                        &lt;text>Better with a team&lt;/text>
+                    &lt;/div>
+                    &lt;div id="closeContactsPopup" onclick="closeContactsPopup();">&lt;img src="./assets/img/blue-arrow-left.png">&lt;/div>
+            	    &lt;div class="contact-header">
+            	    	&lt;div class="initials" style="background-color: ${details.color}">${details.initials}&lt;/div>
+            	    	&lt;div>
+            	    	    &lt;span>${details.firstName} ${details.lastName}&lt;/span>
+            	    	&lt;/div>
+            	    &lt;/div>
+
+                    &lt;div class="mobile-contact-details">
+            	    	&lt;h2>Contact information&lt;/h2>
+            	    	&lt;div>
+            	    	    &lt;p>&lt;b>Email&lt;/b>&lt;/p>
+                            &lt;p id="popup-mail">&lt;a href="mailto:${details.email}">${details.email}&lt;/a>&lt;/p>
+                            &lt;p>&lt;b>Phone&lt;/b>&lt;/p>
+                            &lt;p id="popup-phone">&lt;a href="tel:${details.phone}">${details.phone}&lt;/a>&lt;/p>
+            	    	&lt;/div>
+                    &lt;/div>
+                    &lt;div id="mobile-action-button" onclick="showContactActions()">&lt;p>...&lt;/p>&lt;/div>
+            &lt;div class="modal-backdrop" onclick="closeContactsPopup(${details.id})">
+                &lt;div id="mobile-action-button-options" class="d-none">
+                    &lt;div onclick="editContact('${details.id}')">&lt;img alt="edit contact" src="./assets/img/edit.png">&lt;/div>
+                    &lt;div onclick="deleteContact('${details.id}')">&lt;img alt="edit contact" src="./assets/img/delete.png">&lt;/div>
+                &lt;/div>
+            &lt;/div>
+        &lt;/div>`;
+}
+
+/**
+ * Provides interactive functionality for showing and hiding contact action options on mobile devices.
+ * @returns {void}
+ */
+function showContactActions() {
+    const actionButtonOptions = document.getElementById('mobile-action-button-options');
+    if (actionButtonOptions.classList.contains('d-none')) {
+        actionButtonOptions.classList.remove('d-none');
+    } else {
+        actionButtonOptions.classList.add('d-none');
+    }
+}
+
+/**
+ * Deletes a contact after confirmation and updates the displayed contact list.
+ * @param {string} contactId - The unique identifier for the contact to delete.
+ * @returns {Promise&lt;void>} A promise that resolves when the contact is deleted and the list is updated.
+ */
+async function deleteContact(contactId) {
+    if (!confirm('Are you sure you want to delete this contact?')) {
+        return;
+    }
+
+    try {
+        let apiUrl = await importConfig();
+        const csrfToken = await getCsrfToken();
+
+        let fetchUrl = `${apiUrl}/api/delete/contact/${contactId}`;
+        const response = await fetch(fetchUrl, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json','CSRF-Token': csrfToken,'Authorization': `Bearer ${localStorage.getItem('token')}`},
+            credentials: 'include',
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            await fetchAndDisplayContacts();
+            document.getElementById('contact-details').innerHTML = '';
+        } else {
+            alert(`Error deleting contact: ${result.message}`);
+        }
+    } catch (error) {
+        console.error('Error deleting contact:', error);
+        alert('An error occurred while deleting the contact.');
+    }
+}
+
+/**
+ * Hides the loader UI element, typically called after initial data loads.
+ * @returns {void}
+ */
+function hideLoader() {
+    let loader = document.getElementById('loader');
+    if (loader) {
+        loader.classList.add("d-none");
+    }
+}
+
+/**
+ * Renders the right side of the contact management interface.
+ * @returns {void}
+ */
+function renderRigthSide() {
+    document.getElementById('contact-main').innerHTML = templateRightSide();
+}
+
+/**
+ * Returns HTML content for the right side of the contact management interface.
+ * @returns {string} HTML content for the right side.
+ */
+function templateRightSide() {
+    return /*html*/ ` 
+    &lt;div id="contact-headline" class="headline-index-contact">
+        &lt;span>Contacts&lt;/span>
+        &lt;img src="./assets/img/headline-bar.png">
+        &lt;p>Better with a team&lt;/p>
+    &lt;/div>
+    &lt;div id="show-contact" class="show-contact">&lt;/div>
+    &lt;button id="add-new-contact-btn" onclick="addNewContact()" class="new-contact">
+        New Contact&lt;img src="./assets/img/user-plus.png">
+    &lt;/button>
+
+    &lt;div id="myModal" class="modal">
+        &lt;div class="modal-content">
+            &lt;h3>Contact successfully created!&lt;/h3>
+        &lt;/div>
+    &lt;/div>`
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addNewContact">addNewContact</a></li><li><a href="global.html#addNewTask">addNewTask</a></li><li><a href="global.html#addNewTaskBoard">addNewTaskBoard</a></li><li><a href="global.html#changeImg">changeImg</a></li><li><a href="global.html#changeImgBack">changeImgBack</a></li><li><a href="global.html#changePriority">changePriority</a></li><li><a href="global.html#checkLoginStatus">checkLoginStatus</a></li><li><a href="global.html#clearAllFields">clearAllFields</a></li><li><a href="global.html#closeContactsPopup">closeContactsPopup</a></li><li><a href="global.html#closeEditPopup">closeEditPopup</a></li><li><a href="global.html#closeIncludeAddTask">closeIncludeAddTask</a></li><li><a href="global.html#closePopup">closePopup</a></li><li><a href="global.html#createContactElement">createContactElement</a></li><li><a href="global.html#createTaskElement">createTaskElement</a></li><li><a href="global.html#deleteContact">deleteContact</a></li><li><a href="global.html#displayTasks">displayTasks</a></li><li><a href="global.html#editContact">editContact</a></li><li><a href="global.html#fetchAccountsAndFillDropdown">fetchAccountsAndFillDropdown</a></li><li><a href="global.html#fetchAndDisplayContacts">fetchAndDisplayContacts</a></li><li><a href="global.html#fetchAwaitingFeedbackTotalTasks">fetchAwaitingFeedbackTotalTasks</a></li><li><a href="global.html#fetchDoneTotalTasks">fetchDoneTotalTasks</a></li><li><a href="global.html#fetchInProgressTotalTasks">fetchInProgressTotalTasks</a></li><li><a href="global.html#fetchInitialData">fetchInitialData</a></li><li><a href="global.html#fetchNextUpcomingDeadlineTask">fetchNextUpcomingDeadlineTask</a></li><li><a href="global.html#fetchTasks">fetchTasks</a></li><li><a href="global.html#fetchToBackend">fetchToBackend</a></li><li><a href="global.html#fetchToDoTotalTasks">fetchToDoTotalTasks</a></li><li><a href="global.html#fetchTotalTasks">fetchTotalTasks</a></li><li><a href="global.html#fetchUrgentTasks">fetchUrgentTasks</a></li><li><a href="global.html#filterAndRenderContacts">filterAndRenderContacts</a></li><li><a href="global.html#getConfigData">getConfigData</a></li><li><a href="global.html#getCsrfToken">getCsrfToken</a></li><li><a href="global.html#guestLogin">guestLogin</a></li><li><a href="global.html#hideLoader">hideLoader</a></li><li><a href="global.html#hideLogout">hideLogout</a></li><li><a href="global.html#importConfig">importConfig</a></li><li><a href="global.html#includeHTMLaddTask">includeHTMLaddTask</a></li><li><a href="global.html#loadConfig">loadConfig</a></li><li><a href="global.html#login">login</a></li><li><a href="global.html#loginUser">loginUser</a></li><li><a href="global.html#logout">logout</a></li><li><a href="global.html#onloadSummary">onloadSummary</a></li><li><a href="global.html#processAndDisplayContacts">processAndDisplayContacts</a></li><li><a href="global.html#registerUser">registerUser</a></li><li><a href="global.html#renderContactDetails">renderContactDetails</a></li><li><a href="global.html#renderLetterSection">renderLetterSection</a></li><li><a href="global.html#renderRigthSide">renderRigthSide</a></li><li><a href="global.html#resetButtons">resetButtons</a></li><li><a href="global.html#saveContact">saveContact</a></li><li><a href="global.html#saveNewContact">saveNewContact</a></li><li><a href="global.html#saveTokenAndRedirect">saveTokenAndRedirect</a></li><li><a href="global.html#searchTasks">searchTasks</a></li><li><a href="global.html#showContactActions">showContactActions</a></li><li><a href="global.html#showContactDetails">showContactDetails</a></li><li><a href="global.html#showLogout">showLogout</a></li><li><a href="global.html#tasksGlobal">tasksGlobal</a></li><li><a href="global.html#templateRightSide">templateRightSide</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.3</a> on Fri Jul 26 2024 13:29:44 GMT+0200 (Mitteleuropäische Sommerzeit)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

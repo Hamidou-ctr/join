@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: login.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: login.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Retrieves a CSRF token from the server configuration.
+ * @returns {Promise&lt;string>} A promise that resolves to the CSRF token string.
+ */
+
+async function getCsrfToken() {
+    let apiUrl = await importConfig();
+    let fetchUrl = `${apiUrl}/api/form`;
+    console.log("Fetching " + fetchUrl);
+    const csrfResponse = await fetch(fetchUrl, {
+        credentials: 'include'
+    });
+    const csrfData = await csrfResponse.json();
+    return csrfData.csrfToken;
+}
+
+/**
+ * Handles the user registration process, validates inputs, and registers a new user if valid.
+ * Prevents the default form submission, checks password confirmation, terms agreement,
+ * and submits the data to a server endpoint if all validations pass.
+ * @param {Event} event - The event object from the form submission.
+ * @returns {Promise&lt;void>} A promise that resolves when the registration process is complete.
+ */
+async function registerUser(event) {
+    event.preventDefault();
+
+    const firstName = document.getElementById('sign-up-firstname').value;
+    const lastName = document.getElementById('sign-up-lastname').value;
+    const email = document.getElementById('sign-up-email').value;
+    const checkBox = document.getElementById('legal-checkbox').checked;
+    const password = document.getElementById('sign-up-password').value;
+    const confirmPassword = document.getElementById('sign-up-confirmPassword').value;
+
+    if (password !== confirmPassword) {
+        document.getElementById('result').innerHTML = 'Passwords do not match';
+    } else {
+        if (!checkBox) {
+            document.getElementById('result').innerHTML = 'Please accept our privacy policy.';
+        } else {
+            try {
+                const csrfToken = await getCsrfToken();
+                let apiUrl = await importConfig();
+                let fetchUrl = `${apiUrl}/api/sign-up`;
+                const response = await fetch(fetchUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'CSRF-Token': csrfToken
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        firstName, lastName, email, password
+                    })
+                });
+                const data = await response.json();
+        
+                if (data.status === 'success') {
+                    console.log("Registration successful");
+                    document.getElementById("result").innerHTML = "Registration successful. Redirecting in 5 seconds...";
+                    // Wait for 5 seconds before logging in the user
+                    setTimeout(async () => {
+                        await loginUser(email, password);
+                    }, 5000);
+                } else {
+                    console.log(data.status);
+                    document.getElementById('result').textContent = "Registration failed. Please try again.";
+                }
+            } catch (error) {
+                console.error('Error during registration:', error);
+                document.getElementById('result').innerHTML = 'Registration server not reachable.';
+            }
+        }
+    }
+}
+
+/**
+ * Logs in a user using their email and password, handles session token storage,
+ * and redirects on successful login.
+ * @param {string} email - User's email address.
+ * @param {string} password - User's password.
+ * @returns {Promise&lt;void>} A promise that resolves when the login process is complete.
+ */
+async function loginUser(email, password) {
+    try {
+        const csrfToken = await getCsrfToken();
+        let apiUrl = await importConfig();
+        let fetchUrl = `${apiUrl}/api/login`;
+        const response = await fetch(fetchUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'CSRF-Token': csrfToken
+            },
+            credentials: 'include',
+            body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Server responded with status: ' + response.status);
+        }
+
+        const data = await response.json();
+
+        if (data.status === '200' &amp;&amp; data.token) {
+            localStorage.setItem('token', data.token);
+            console.log("Login successful, token saved.");
+            document.getElementById("result").innerHTML = "Login successful";
+            window.location.href = 'index.html';
+        } else {
+            console.error('Login failed:', data);
+            document.getElementById('result').textContent = "Login failed. Please check your username and password.";
+        }
+    } catch (error) {
+        console.error('Error during login:', error);
+        document.getElementById('result').innerHTML = 'Authentication server not reachable. Please try again later.';
+    }
+}
+
+/**
+ * Handles a guest login by retrieving guest credentials from the configuration and
+ * using them to log in.
+ * @param {Event} event - The event object from the form submission.
+ * @returns {Promise&lt;void>} A promise that resolves when the guest login process is complete.
+ */
+async function guestLogin(event) {
+    event.preventDefault();
+    let guestEmail = await getConfigData("guestEmail");
+    let guestPassword = await getConfigData("guestPassword");
+    await loginUser(guestEmail, guestPassword);
+}
+
+/**
+ * Processes the login form submission using provided credentials.
+ * @param {Event} event - The event object from the form submission.
+ * @returns {Promise&lt;void>} A promise that resolves when the login process is initiated.
+ */
+async function login(event) {
+    event.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+
+    await loginUser(email, password);
+}
+
+/**
+ * Attaches event listeners to form elements responsible for user registration and login,
+ * initializing form handling upon document readiness.
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', registerUser);
+    }
+
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', login);
+    }
+});
+
+/**
+ * Displays the login section after a short delay, making the interface visible.
+ */
+setTimeout(async () => {
+    let loginContent = document.getElementById('login-content');
+    loginContent.style.display = 'flex';
+}, 1000);</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addNewContact">addNewContact</a></li><li><a href="global.html#addNewTask">addNewTask</a></li><li><a href="global.html#addNewTaskBoard">addNewTaskBoard</a></li><li><a href="global.html#changeImg">changeImg</a></li><li><a href="global.html#changeImgBack">changeImgBack</a></li><li><a href="global.html#changePriority">changePriority</a></li><li><a href="global.html#checkLoginStatus">checkLoginStatus</a></li><li><a href="global.html#clearAllFields">clearAllFields</a></li><li><a href="global.html#closeContactsPopup">closeContactsPopup</a></li><li><a href="global.html#closeEditPopup">closeEditPopup</a></li><li><a href="global.html#closeIncludeAddTask">closeIncludeAddTask</a></li><li><a href="global.html#closePopup">closePopup</a></li><li><a href="global.html#createContactElement">createContactElement</a></li><li><a href="global.html#createTaskElement">createTaskElement</a></li><li><a href="global.html#deleteContact">deleteContact</a></li><li><a href="global.html#displayTasks">displayTasks</a></li><li><a href="global.html#editContact">editContact</a></li><li><a href="global.html#fetchAccountsAndFillDropdown">fetchAccountsAndFillDropdown</a></li><li><a href="global.html#fetchAndDisplayContacts">fetchAndDisplayContacts</a></li><li><a href="global.html#fetchAwaitingFeedbackTotalTasks">fetchAwaitingFeedbackTotalTasks</a></li><li><a href="global.html#fetchDoneTotalTasks">fetchDoneTotalTasks</a></li><li><a href="global.html#fetchInProgressTotalTasks">fetchInProgressTotalTasks</a></li><li><a href="global.html#fetchInitialData">fetchInitialData</a></li><li><a href="global.html#fetchNextUpcomingDeadlineTask">fetchNextUpcomingDeadlineTask</a></li><li><a href="global.html#fetchTasks">fetchTasks</a></li><li><a href="global.html#fetchToBackend">fetchToBackend</a></li><li><a href="global.html#fetchToDoTotalTasks">fetchToDoTotalTasks</a></li><li><a href="global.html#fetchTotalTasks">fetchTotalTasks</a></li><li><a href="global.html#fetchUrgentTasks">fetchUrgentTasks</a></li><li><a href="global.html#filterAndRenderContacts">filterAndRenderContacts</a></li><li><a href="global.html#getConfigData">getConfigData</a></li><li><a href="global.html#getCsrfToken">getCsrfToken</a></li><li><a href="global.html#guestLogin">guestLogin</a></li><li><a href="global.html#hideLoader">hideLoader</a></li><li><a href="global.html#hideLogout">hideLogout</a></li><li><a href="global.html#importConfig">importConfig</a></li><li><a href="global.html#includeHTMLaddTask">includeHTMLaddTask</a></li><li><a href="global.html#loadConfig">loadConfig</a></li><li><a href="global.html#login">login</a></li><li><a href="global.html#loginUser">loginUser</a></li><li><a href="global.html#logout">logout</a></li><li><a href="global.html#onloadSummary">onloadSummary</a></li><li><a href="global.html#processAndDisplayContacts">processAndDisplayContacts</a></li><li><a href="global.html#registerUser">registerUser</a></li><li><a href="global.html#renderContactDetails">renderContactDetails</a></li><li><a href="global.html#renderLetterSection">renderLetterSection</a></li><li><a href="global.html#renderRigthSide">renderRigthSide</a></li><li><a href="global.html#resetButtons">resetButtons</a></li><li><a href="global.html#saveContact">saveContact</a></li><li><a href="global.html#saveNewContact">saveNewContact</a></li><li><a href="global.html#saveTokenAndRedirect">saveTokenAndRedirect</a></li><li><a href="global.html#searchTasks">searchTasks</a></li><li><a href="global.html#showContactActions">showContactActions</a></li><li><a href="global.html#showContactDetails">showContactDetails</a></li><li><a href="global.html#showLogout">showLogout</a></li><li><a href="global.html#tasksGlobal">tasksGlobal</a></li><li><a href="global.html#templateRightSide">templateRightSide</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.3</a> on Fri Jul 26 2024 13:29:44 GMT+0200 (Mitteleuropäische Sommerzeit)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

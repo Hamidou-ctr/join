@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: loginRequired.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: loginRequired.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Checks the user's login status by requesting the login state from the server.
+ * Redirects to the login page if not logged in or in case of any errors during the status check.
+ * @returns {Promise&lt;void>} A promise that resolves when the login status check is complete.
+ */
+async function checkLoginStatus() {
+    try {
+        let apiUrl = await importConfig();
+        let fetchUrl = `${apiUrl}/api/status`;
+        const response = await fetch(fetchUrl, {
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            console.error('Fehler beim Überprüfen des Anmeldestatus: Ungültiger Statuscode:', response.status);
+            window.location.href = '/login.html';
+            return;
+        }
+
+        const text = await response.text();
+        try {
+            const data = JSON.parse(text);
+            if (data.loggedIn) {
+                let imagePath = `./../assets/profiles/${data.email.replace("@", "_at_")}/profile.jpg`;
+
+                let img = new Image();
+                img.src = imagePath;
+                img.onload = function() {
+                    document.getElementById('profile-actions').innerHTML = `&lt;img id="profile-picture" src="${imagePath}" alt="Profile picture">`;
+                    document.body.style.display = 'block';
+                }
+                img.onerror = function() {
+                    let initials = `${data.firstName.charAt(0)}${data.lastName.charAt(0)}`.toUpperCase();
+                    document.body.style.display = 'block';
+                    document.getElementById('profile-actions').innerHTML = `${initials}`;
+                }
+                // documenet.getElementById('profile-actions').style.background = data.color;
+            } else {
+                window.location.href = '/login.html'; // Weiterleiten auf login.html, wenn nicht angemeldet
+            }
+        } catch (parseError) {
+            console.error('Fehler beim Parsen des JSON:', parseError);
+            console.error('Serverantwort:', text);
+            window.location.href = '/login.html'; // Weiterleiten auf login.html im Fehlerfall
+        }
+    } catch (error) {
+        console.error('Fehler beim Überprüfen des Anmeldestatus:', error);
+        window.location.href = '/login.html'; // Weiterleiten auf login.html im Fehlerfall
+    }
+}
+
+/**
+ * Logs out the current user by sending a logout request to the server and then redirects to the login page.
+ * Handles the request using CSRF token for security.
+ * @returns {Promise&lt;void>} A promise that resolves when the logout process is complete.
+ */
+async function logout() {
+    let apiUrl = await importConfig();
+    let fetchUrl = `${apiUrl}/api/form`;
+    const csrfResponse = await fetch(fetchUrl, {
+        credentials: 'include'
+    });
+    const csrfData = await csrfResponse.json();
+    const csrfToken = csrfData.csrfToken;
+
+    try {
+        let apiUrl = await importConfig();
+        let fetchUrl = `${apiUrl}/api/logout`;
+        const response = await fetch(fetchUrl, {
+            method: 'POST',
+            headers: {
+                'CSRF-Token': csrfToken // CSRF-Token in den Header einfügen
+            },
+            credentials: 'include', // Einschließen von Cookies im Request
+        });
+        const data = await response.json();
+        if (data.status === '200') {
+            document.body.style.display = 'none';
+            console.log("logout successful");
+            // document.getElementById("result").innerHTML = "logout successful";
+            window.location.href = '/login.html';
+        } else {
+            alert("Logout failed.");
+            // document.getElementById('result').textContent = "Logout failed. Please try again.";
+        }
+    } catch (error) {
+        console.error('Fehler beim Logout:', error);
+    }
+}
+
+/**
+ * Adds event listeners upon DOMContentLoaded event, particularly for checking login status and handling logout.
+ */
+
+document.addEventListener('DOMContentLoaded', function() {
+    checkLoginStatus();
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    } else {
+        console.error('Logout-Button nicht gefunden');
+    }
+});
+
+/**
+ * Shows the logout button in the UI.
+ * @returns {void}
+ */
+function showLogout() {
+    document.getElementById('header-logout').setAttribute('style', 'display: flex !important');
+}
+
+/**
+ * Hides the logout button in the UI after a brief delay.
+ * @returns {void}
+ */
+function hideLogout() {
+    setTimeout(() => {
+        document.getElementById('header-logout').setAttribute('style', 'display: none !important');
+    }, 1000);
+}</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addNewContact">addNewContact</a></li><li><a href="global.html#addNewTask">addNewTask</a></li><li><a href="global.html#addNewTaskBoard">addNewTaskBoard</a></li><li><a href="global.html#changeImg">changeImg</a></li><li><a href="global.html#changeImgBack">changeImgBack</a></li><li><a href="global.html#changePriority">changePriority</a></li><li><a href="global.html#checkLoginStatus">checkLoginStatus</a></li><li><a href="global.html#clearAllFields">clearAllFields</a></li><li><a href="global.html#closeContactsPopup">closeContactsPopup</a></li><li><a href="global.html#closeEditPopup">closeEditPopup</a></li><li><a href="global.html#closeIncludeAddTask">closeIncludeAddTask</a></li><li><a href="global.html#closePopup">closePopup</a></li><li><a href="global.html#createContactElement">createContactElement</a></li><li><a href="global.html#createTaskElement">createTaskElement</a></li><li><a href="global.html#deleteContact">deleteContact</a></li><li><a href="global.html#displayTasks">displayTasks</a></li><li><a href="global.html#editContact">editContact</a></li><li><a href="global.html#fetchAccountsAndFillDropdown">fetchAccountsAndFillDropdown</a></li><li><a href="global.html#fetchAndDisplayContacts">fetchAndDisplayContacts</a></li><li><a href="global.html#fetchAwaitingFeedbackTotalTasks">fetchAwaitingFeedbackTotalTasks</a></li><li><a href="global.html#fetchDoneTotalTasks">fetchDoneTotalTasks</a></li><li><a href="global.html#fetchInProgressTotalTasks">fetchInProgressTotalTasks</a></li><li><a href="global.html#fetchInitialData">fetchInitialData</a></li><li><a href="global.html#fetchNextUpcomingDeadlineTask">fetchNextUpcomingDeadlineTask</a></li><li><a href="global.html#fetchTasks">fetchTasks</a></li><li><a href="global.html#fetchToBackend">fetchToBackend</a></li><li><a href="global.html#fetchToDoTotalTasks">fetchToDoTotalTasks</a></li><li><a href="global.html#fetchTotalTasks">fetchTotalTasks</a></li><li><a href="global.html#fetchUrgentTasks">fetchUrgentTasks</a></li><li><a href="global.html#filterAndRenderContacts">filterAndRenderContacts</a></li><li><a href="global.html#getConfigData">getConfigData</a></li><li><a href="global.html#getCsrfToken">getCsrfToken</a></li><li><a href="global.html#guestLogin">guestLogin</a></li><li><a href="global.html#hideLoader">hideLoader</a></li><li><a href="global.html#hideLogout">hideLogout</a></li><li><a href="global.html#importConfig">importConfig</a></li><li><a href="global.html#includeHTMLaddTask">includeHTMLaddTask</a></li><li><a href="global.html#loadConfig">loadConfig</a></li><li><a href="global.html#login">login</a></li><li><a href="global.html#loginUser">loginUser</a></li><li><a href="global.html#logout">logout</a></li><li><a href="global.html#onloadSummary">onloadSummary</a></li><li><a href="global.html#processAndDisplayContacts">processAndDisplayContacts</a></li><li><a href="global.html#registerUser">registerUser</a></li><li><a href="global.html#renderContactDetails">renderContactDetails</a></li><li><a href="global.html#renderLetterSection">renderLetterSection</a></li><li><a href="global.html#renderRigthSide">renderRigthSide</a></li><li><a href="global.html#resetButtons">resetButtons</a></li><li><a href="global.html#saveContact">saveContact</a></li><li><a href="global.html#saveNewContact">saveNewContact</a></li><li><a href="global.html#saveTokenAndRedirect">saveTokenAndRedirect</a></li><li><a href="global.html#searchTasks">searchTasks</a></li><li><a href="global.html#showContactActions">showContactActions</a></li><li><a href="global.html#showContactDetails">showContactDetails</a></li><li><a href="global.html#showLogout">showLogout</a></li><li><a href="global.html#tasksGlobal">tasksGlobal</a></li><li><a href="global.html#templateRightSide">templateRightSide</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.3</a> on Fri Jul 26 2024 13:29:44 GMT+0200 (Mitteleuropäische Sommerzeit)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

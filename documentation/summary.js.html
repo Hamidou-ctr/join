@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: summary.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: summary.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Initializes the application by checking user status and setting up the greeting based on user data.
+ * @returns {Promise&lt;void>} A promise that resolves when the user status check is complete.
+ */
+async function onloadSummary() {
+    let apiUrl = await importConfig();
+    let fetchUrl = `${apiUrl}/api/status`;
+    const response = await fetch(fetchUrl, {
+        credentials: 'include'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.loggedIn) {
+            const greetingElement = document.getElementById('board-greeting');
+            if (greetingElement) {
+                greetingElement.textContent = `${data.firstName} ${data.lastName}`;
+            } else {
+                console.log("Element 'board-greeting' not found");
+            }
+        } else {
+            console.log("Not logged in");
+            // window.location.href = './login.html'; // Optional: Redirect, falls nicht eingeloggt
+        }
+    })
+    .catch(error => console.error('Error fetching user data:', error));
+}
+
+/**
+ * Fetches the total number of tasks and updates the display accordingly.
+ * @returns {Promise&lt;void>} A promise that resolves when the task count has been fetched and displayed.
+ */
+async function fetchTotalTasks() {
+    try {
+        const data = await fetchTasks();
+
+        if (data.total !== undefined) {
+            // Setzt die Anzahl der Tasks im 'sum-task' Element
+            document.getElementById('tasks-in-board').textContent = `${data.total}`;
+        } else {
+            document.getElementById('tasks-in-board').textContent = '0';
+        }
+    } catch (error) {
+        console.error('Error fetching total tasks:', error);
+        document.getElementById('tasks-in-board').textContent = '0';
+    }
+}
+
+/**
+ * Fetches the total number of tasks that are currently in progress and updates the display.
+ * @returns {Promise&lt;void>} A promise that resolves when the in-progress task count has been fetched and displayed.
+ */
+async function fetchInProgressTotalTasks() {
+    try {
+        const result = await fetchTasks();
+
+        const tasks = result.tasks || {};
+        let inProgressCount = 0;
+
+        // Durchgehen aller Tasks und Zählen derjenigen mit dem Status 'in-progress'
+        Object.values(tasks).forEach(task => {
+            if (task.state === 'in-progress') {
+                inProgressCount++;
+            }
+        });
+
+        // Anzeigen der Anzahl der 'in-progress' Tasks
+        document.getElementById('tasks-in-progress').textContent = inProgressCount;
+    } catch (error) {
+        console.error('Error fetching total tasks:', error);
+        document.getElementById('tasks-in-progress').textContent = '0';
+    }
+}
+
+/**
+ * Fetches the total number of tasks that are awaiting feedback and updates the display.
+ * @returns {Promise&lt;void>} A promise that resolves when the awaiting feedback task count has been fetched and displayed.
+ */
+async function fetchAwaitingFeedbackTotalTasks() {
+    try {
+        const result = await fetchTasks();
+
+        const tasks = result.tasks || {};
+        let awaitingFeedbackCount = 0;
+
+        Object.values(tasks).forEach(task => {
+            if (task.state === 'awaiting-feedback') {
+                awaitingFeedbackCount++;
+            }
+        });
+
+        document.getElementById('tasks-awaiting-feedback').textContent = awaitingFeedbackCount;
+    } catch (error) {
+        console.error('Error fetching total tasks:', error);
+        document.getElementById('tasks-awaiting-feedback').textContent = '0';
+    }
+}
+
+/**
+ * Fetches the total number of tasks that are marked as done and updates the display.
+ * @returns {Promise&lt;void>} A promise that resolves when the done task count has been fetched and displayed.
+ */
+async function fetchDoneTotalTasks() {
+    try {
+        const result = await fetchTasks();
+
+        const tasks = result.tasks || {};
+        let doneCount = 0;
+
+        Object.values(tasks).forEach(task => {
+            if (task.state === 'done') {
+                doneCount++;
+            }
+        });
+
+        document.getElementById('tasks-done').textContent = doneCount;
+    } catch (error) {
+        console.error('Error fetching total tasks:', error);
+        document.getElementById('tasks-done').textContent = '0';
+    }
+}
+
+/**
+ * Fetches the total number of tasks that are marked as todo and updates the display.
+ * @returns {Promise&lt;void>} A promise that resolves when the todo task count has been fetched and displayed.
+ */
+async function fetchToDoTotalTasks() {
+    try {
+        const result = await fetchTasks();
+        
+        const tasks = result.tasks || {};
+        let todoCount = 0;
+
+        Object.values(tasks).forEach(task => {
+            if (task.state === 'todo') {
+                todoCount++;
+            }
+        });
+
+        document.getElementById('tasks-todo').textContent = todoCount;
+    } catch (error) {
+        console.error('Error fetching total tasks:', error);
+        document.getElementById('tasks-todo').textContent = '0';
+    }
+}
+
+/**
+ * Fetches the total number of urgent tasks and updates the display.
+ * @returns {Promise&lt;void>} A promise that resolves when the urgent task count has been fetched and displayed.
+ */
+async function fetchUrgentTasks() {
+    try {
+        const result = await fetchTasks();
+        
+        const tasks = result.tasks || {};
+        let urgentCount = 0;
+
+        Object.values(tasks).forEach(task => {
+            if (task.priority === 'urgent') {
+                urgentCount++;
+            }
+        });
+
+        document.getElementById('urgent-count').textContent = urgentCount;
+    } catch (error) {
+        console.error('Error fetching total tasks:', error);
+        document.getElementById('urgent-count').textContent = '0';
+    }
+}
+
+/**
+ * Fetches tasks and determines the next upcoming deadline among them.
+ * @returns {Promise&lt;void>} A promise that resolves when the task with the nearest deadline is identified and displayed.
+ */
+async function fetchNextUpcomingDeadlineTask() {
+    try {
+        const response = await fetch('https://auth.gregorkrebs.de/api/tasks', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch tasks');
+        }
+
+        const result = await response.json();
+        const tasks = result.tasks || {};
+        let earliestDueDate = null;
+        const now = new Date();
+
+        Object.values(tasks).forEach(task => {
+            if ((task.state === 'todo' || task.state === 'in-progress') &amp;&amp; task.dueDate) {
+                const taskDueDate = new Date(task.dueDate);
+                // Ensure the task due date is in the future
+                if (taskDueDate > now &amp;&amp; (!earliestDueDate || taskDueDate &lt; earliestDueDate)) {
+                    earliestDueDate = taskDueDate;
+                }
+            }
+        });
+
+        // Format the earliest due date for display, if one is found that's in the future
+        let displayDate = 'No upcoming deadlines';
+        if (earliestDueDate) {
+            displayDate = earliestDueDate.toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric'
+            });
+        }
+
+        document.getElementById('NextUpcomingDeadline').textContent = displayDate;
+    } catch (error) {
+        console.error('Error fetching the next upcoming deadline task:', error);
+        document.getElementById('NextUpcomingDeadline').textContent = 'Error fetching data';
+    }
+}
+
+/**
+ * Fetches all tasks from the server. This function is a helper used by other specific fetching functions.
+ * @returns {Promise&lt;Object>} A promise that resolves to the tasks data.
+ */
+async function fetchTasks() {
+    try {
+        const csrfToken = await getCsrfToken();
+        const response = await fetch('https://auth.gregorkrebs.de/api/tasks', {
+            method: 'GET',
+            headers: {
+                'CSRF-Token': csrfToken,
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            throw new Error('Failed to fetch tasks');
+        }
+        return response.json();
+    } catch(error) {
+        console.error("Fehler beim Abrufen der Tasks")
+    }
+}
+
+/**
+ * Retrieves the CSRF token necessary for secure communication with the server.
+ * @returns {Promise&lt;string>} A promise that resolves to the CSRF token.
+ */
+async function getCsrfToken() {
+    try {
+        const csrfResponse = await fetch('https://auth.gregorkrebs.de/api/form', {
+            credentials: 'include'
+        });
+        const csrfData = await csrfResponse.json();
+        const csrfToken = csrfData.csrfToken;
+        return csrfToken;
+    } catch(error) {
+        console.error("Fehler beim Abrufen des CSRF-Tokens.");
+    }
+}
+
+/**
+ * Saves the authentication token in local storage and redirects the user to a protected route.
+ * @param {Object} data - Data containing the authentication token.
+ */
+function saveTokenAndRedirect(data) {
+    localStorage.setItem('token', data.token);
+    window.location.href = '/some-protected-route.html'; // Weiterleitung zum geschützten Bereich
+}
+
+// async function fetchProtectedData() {
+//     const response = await fetch('https://auth.gregorkrebs.de/api/protected-data', {
+//         headers: {
+//             'Authorization': `Bearer ${localStorage.getItem('token')}`
+//         }
+//     });
+//     const data = await response.json();
+//     console.log(data);
+// }
+
+/**
+ * Fetches and processes initial task-related data when the application starts.
+ * @returns {Promise&lt;void>} A promise that resolves when all initial data has been fetched and displayed.
+ */
+async function fetchInitialData() {
+    try {
+        await fetchTotalTasks();
+        await fetchInProgressTotalTasks();
+        await fetchAwaitingFeedbackTotalTasks();
+        await fetchDoneTotalTasks();
+        await fetchNextUpcomingDeadlineTask();
+        await fetchUrgentTasks();
+        await fetchToDoTotalTasks();
+        hideLoader();
+    } catch (error) {
+        console.error('Error fetching initial data:', error);
+        hideLoader();
+    }
+}
+
+/**
+ * Hides the loading indicator from the user interface.
+ */
+function hideLoader() {
+    const loader = document.getElementById('loader');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
+
+/**
+ * Document ready function to trigger initial data fetching.
+ */
+document.addEventListener('DOMContentLoaded', 
+function() { 
+    fetchInitialData();
+});
+
+/**
+ * Additional document ready function that initializes a summary of the user session and potentially other startup tasks.
+ */
+document.addEventListener('DOMContentLoaded', onloadSummary);
+
+/**
+ * Changes the image source of an HTML element to a hover image when the user interacts with it.
+ * @param {string} id - The DOM element ID.
+ * @param {string} hoverImg - The source path of the hover image.
+ * @param {string} standardImg - The source path of the standard image.
+ */
+function changeImg(id, hoverImg, standardImg) {
+    let img = document.getElementById(`${id}`);
+    if (img.src = `${standardImg}`) {
+        img.src = `${hoverImg}`;
+    } else {
+        img.src = `${standardImg}`;
+    }
+}
+
+/**
+ * Reverts the image source of an HTML element from a hover image back to the standard image.
+ * @param {string} id - The DOM element ID.
+ * @param {string} hoverImg - The source path of the hover image.
+ * @param {string} standardImg - The source path of the standard image.
+ */
+function changeImgBack(id, hoverImg, standardImg) {
+    let img = document.getElementById(`${id}`);
+    if (img.src = `${hoverImg}`) {
+        img.src = `${standardImg}`;
+    }
+}
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addNewContact">addNewContact</a></li><li><a href="global.html#addNewTask">addNewTask</a></li><li><a href="global.html#addNewTaskBoard">addNewTaskBoard</a></li><li><a href="global.html#changeImg">changeImg</a></li><li><a href="global.html#changeImgBack">changeImgBack</a></li><li><a href="global.html#changePriority">changePriority</a></li><li><a href="global.html#checkLoginStatus">checkLoginStatus</a></li><li><a href="global.html#clearAllFields">clearAllFields</a></li><li><a href="global.html#closeContactsPopup">closeContactsPopup</a></li><li><a href="global.html#closeEditPopup">closeEditPopup</a></li><li><a href="global.html#closeIncludeAddTask">closeIncludeAddTask</a></li><li><a href="global.html#closePopup">closePopup</a></li><li><a href="global.html#createContactElement">createContactElement</a></li><li><a href="global.html#createTaskElement">createTaskElement</a></li><li><a href="global.html#deleteContact">deleteContact</a></li><li><a href="global.html#displayTasks">displayTasks</a></li><li><a href="global.html#editContact">editContact</a></li><li><a href="global.html#fetchAccountsAndFillDropdown">fetchAccountsAndFillDropdown</a></li><li><a href="global.html#fetchAndDisplayContacts">fetchAndDisplayContacts</a></li><li><a href="global.html#fetchAwaitingFeedbackTotalTasks">fetchAwaitingFeedbackTotalTasks</a></li><li><a href="global.html#fetchDoneTotalTasks">fetchDoneTotalTasks</a></li><li><a href="global.html#fetchInProgressTotalTasks">fetchInProgressTotalTasks</a></li><li><a href="global.html#fetchInitialData">fetchInitialData</a></li><li><a href="global.html#fetchNextUpcomingDeadlineTask">fetchNextUpcomingDeadlineTask</a></li><li><a href="global.html#fetchTasks">fetchTasks</a></li><li><a href="global.html#fetchToBackend">fetchToBackend</a></li><li><a href="global.html#fetchToDoTotalTasks">fetchToDoTotalTasks</a></li><li><a href="global.html#fetchTotalTasks">fetchTotalTasks</a></li><li><a href="global.html#fetchUrgentTasks">fetchUrgentTasks</a></li><li><a href="global.html#filterAndRenderContacts">filterAndRenderContacts</a></li><li><a href="global.html#getConfigData">getConfigData</a></li><li><a href="global.html#getCsrfToken">getCsrfToken</a></li><li><a href="global.html#guestLogin">guestLogin</a></li><li><a href="global.html#hideLoader">hideLoader</a></li><li><a href="global.html#hideLogout">hideLogout</a></li><li><a href="global.html#importConfig">importConfig</a></li><li><a href="global.html#includeHTMLaddTask">includeHTMLaddTask</a></li><li><a href="global.html#loadConfig">loadConfig</a></li><li><a href="global.html#login">login</a></li><li><a href="global.html#loginUser">loginUser</a></li><li><a href="global.html#logout">logout</a></li><li><a href="global.html#onloadSummary">onloadSummary</a></li><li><a href="global.html#processAndDisplayContacts">processAndDisplayContacts</a></li><li><a href="global.html#registerUser">registerUser</a></li><li><a href="global.html#renderContactDetails">renderContactDetails</a></li><li><a href="global.html#renderLetterSection">renderLetterSection</a></li><li><a href="global.html#renderRigthSide">renderRigthSide</a></li><li><a href="global.html#resetButtons">resetButtons</a></li><li><a href="global.html#saveContact">saveContact</a></li><li><a href="global.html#saveNewContact">saveNewContact</a></li><li><a href="global.html#saveTokenAndRedirect">saveTokenAndRedirect</a></li><li><a href="global.html#searchTasks">searchTasks</a></li><li><a href="global.html#showContactActions">showContactActions</a></li><li><a href="global.html#showContactDetails">showContactDetails</a></li><li><a href="global.html#showLogout">showLogout</a></li><li><a href="global.html#tasksGlobal">tasksGlobal</a></li><li><a href="global.html#templateRightSide">templateRightSide</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.3</a> on Fri Jul 26 2024 13:29:44 GMT+0200 (Mitteleuropäische Sommerzeit)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

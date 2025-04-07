@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: board.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: board.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Retrieves a CSRF token from the server configuration.
+ * @returns {Promise&lt;string>} A promise that resolves to the CSRF token string.
+ */
+async function getCsrfToken() {
+    let apiUrl = await importConfig();
+    let fetchUrl = `${apiUrl}/api/form`;
+    const csrfResponse = await fetch(fetchUrl, {
+        credentials: 'include'
+    });
+    const csrfData = await csrfResponse.json();
+    const csrfToken = csrfData.csrfToken;
+    return csrfToken;
+}
+
+/**
+ * Fetches tasks from the server and stores them in a global object.
+ * @returns {Promise&lt;void>} A promise that resolves when tasks are fetched and processed.
+ */
+async function fetchTasks() {
+    try {
+        const csrfToken = await getCsrfToken();
+        let apiUrl = await importConfig();
+        let fetchUrl = `${apiUrl}/api/tasks`;
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'CSRF-Token': csrfToken,
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            credentials: 'include',
+        });
+        if (!response.ok) {
+            throw new Error('Failed to fetch tasks');
+        }
+        const result = await response.json();
+        tasksGlobal = {};  // Re-initialize to ensure it's empty
+        Object.keys(result.tasks).forEach(key => {
+            const task = result.tasks[key];
+            tasksGlobal[task.id] = task;  // Store tasks by their 'id', not Firebase key
+        });
+        displayTasks(tasksGlobal);
+    } catch (error) {
+        console.error('Error fetching tasks:', error);
+    }
+}
+
+/**
+ * Displays tasks in appropriate sections based on their state.
+ * @param {Object} tasks - The tasks object to display.
+ * @returns {void}
+ */
+function displayTasks(tasks) {
+    Object.keys(tasks).forEach(taskId => {
+        const task = tasks[taskId];
+        if (!task.state) {
+            console.error('Unknown task state:', task.state, 'for task ID:', taskId);
+            return; // Überspringe Tasks ohne Zustand
+        }
+
+        const taskElement = createTaskElement(task);
+        switch(task.state) {
+            case 'todo':
+                document.getElementById('todo-box').appendChild(taskElement);
+                break;
+            case 'in-progress':
+                document.getElementById('inprogress-box').appendChild(taskElement);
+                break;
+            case 'awaiting-feedback':
+                document.getElementById('feedback-box').appendChild(taskElement);
+                break;
+            case 'done':
+                document.getElementById('done-box').appendChild(taskElement);
+                break;
+            default:
+                console.error('Unknown task state:', task.state);
+        }
+    });
+}
+
+/**
+ * Creates a DOM element for a task.
+ * @param {Object} task - The task data for which the element is created.
+ * @returns {HTMLElement} The created task element.
+ */
+function createTaskElement(task) {
+    const div = document.createElement('div');
+    const categoryMap = {
+        technicalTask: "Technical Task",
+        userStory: "User Story"
+    };
+
+    let categoryName = categoryMap[task.category] || task.category; // Verwende den Zuordnungswert oder den ursprünglichen Wert, falls nicht gefunden
+
+    div.className = 'task-item';
+    div.innerHTML = `
+        &lt;div class="${task.category}">${categoryName}&lt;/div>
+        &lt;h4>${task.title}&lt;/h4>
+        &lt;p>${task.description}&lt;/p>
+    `;
+    // &lt;small>Due: ${task.dueDate}&lt;/small>
+
+    div.addEventListener('click', () => openTask(task.id));
+
+    return div;
+}
+
+/**
+ * Filters and displays tasks based on the search input.
+ * @returns {void}
+ */
+function searchTasks() {
+    const searchInput = document.getElementById('search-task');
+    const filter = searchInput.value.toLowerCase();
+    const resultsContainer = document.getElementById('search-results');
+    resultsContainer.innerHTML = ''; // Leert die vorherigen Suchergebnisse
+
+    if (filter) {
+        Object.values(tasksGlobal).forEach(task => {
+            if (task.title.toLowerCase().includes(filter) || task.id.toLowerCase().includes(filter)) {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'search-result-item';
+                resultDiv.textContent = task.id + ' - ' + task.title;
+                resultDiv.onclick = function() {
+                    openTask(task.id);
+                };
+                resultsContainer.appendChild(resultDiv);
+            }
+        });
+
+        // Zeige eine Nachricht an, wenn keine Tasks gefunden wurden
+        if (resultsContainer.innerHTML === '') {
+            resultsContainer.innerHTML = '&lt;div class="search-result-item">No tasks found.&lt;/div>';
+        }
+        resultsContainer.style.display = 'block'; 
+    } else {
+        resultsContainer.style.display = 'none';
+    }
+}
+
+/**
+ * Fetches initial data and hides the loader once data is loaded.
+ * @returns {Promise&lt;void>} A promise that resolves when initial data is fetched.
+ */
+async function fetchInitialData() {
+    try {
+        await fetchTasks();
+        hideLoader();
+    } catch (error) {
+        console.error('Error fetching initial data:', error);
+        hideLoader();
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    fetchInitialData();
+});
+
+/**
+ * Hides the loader UI element.
+ * @returns {void}
+ */
+function hideLoader() {
+    const loader = document.getElementById('loader');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
+
+/**
+ * Function for opening a task and displaying the task details as popup
+ * 
+ * @param {string} taskId - Specific ID of the task you want to open
+ * @returns {void}
+ */
+let tasksGlobal = {};
+function openTask(taskId) {
+    const task = tasksGlobal[taskId];
+    if (!task) {
+        console.error('Task not found!', taskId);
+        return;
+    }
+
+    document.getElementById('popupTitle').textContent = task.title;
+    document.getElementById('popupDescription').textContent = task.description;
+    document.getElementById('popupDueDate').textContent = `Due: ${task.dueDate}`;
+
+    const popupCategoryDiv = document.getElementById('popupCategory');
+    popupCategoryDiv.className = '';
+    popupCategoryDiv.classList.add(task.category); 
+    const categoryMap = {
+        technicalTask: "Technical Task",
+        userStory: "User Story"
+    };
+    popupCategoryDiv.textContent = categoryMap[task.category] || task.category;
+
+    document.getElementById('taskPopup').style.display = 'block';
+    document.getElementById('overlay').style.display = 'block';
+}
+
+
+/**
+ * Closes the task details popup.
+ * @returns {void}
+ */
+function closePopup() { 
+    document.getElementById('taskPopup').style.display = 'none';
+    document.getElementById('overlay').style.display = 'none';
+}
+
+/**
+ * Triggers the display of a window to add a new task.
+ * @returns {void}
+ */
+function addNewTask() {
+    document.body.classList.add('overflow-hidden');
+    document.getElementById('show-addTaskInclude').innerHTML = /*html*/ `
+        &lt;div w3-include-html="add-TaskInclude.html" >&lt;/div>`;
+    includeHTMLaddTask();
+}
+
+/**
+ * Includes HTML content for adding tasks dynamically from external files.
+ * @returns {Promise&lt;void>} A promise that resolves when the HTML content is included.
+ */
+async function includeHTMLaddTask() {
+    let includeElements = document.querySelectorAll('[w3-include-html]');
+    for (let i = 0; i &lt; includeElements.length; i++) {
+        const element = includeElements[i];
+        file = element.getAttribute("w3-include-html");
+        let resp = await fetch(file);
+        if (resp.ok) {
+            element.innerHTML = await resp.text();
+        } else {
+            element.innerHTML = 'Page not found';
+        }
+    }
+}
+
+/**
+ * Sets up the task board interface for adding a new task.
+ * Activates the task background and configures global settings for the new task's placement.
+ * @param {string} addSplit - The section where the new task will be displayed.
+ * @returns {void}
+ */
+function addNewTaskBoard(addSplit) { 
+    document.getElementById('show-AddTask-Background').classList = 'show-Task-Background';
+    includeBoard = true;
+    selectedSplit = addSplit;
+    addNewTask();
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addNewContact">addNewContact</a></li><li><a href="global.html#addNewTask">addNewTask</a></li><li><a href="global.html#addNewTaskBoard">addNewTaskBoard</a></li><li><a href="global.html#changeImg">changeImg</a></li><li><a href="global.html#changeImgBack">changeImgBack</a></li><li><a href="global.html#changePriority">changePriority</a></li><li><a href="global.html#checkLoginStatus">checkLoginStatus</a></li><li><a href="global.html#clearAllFields">clearAllFields</a></li><li><a href="global.html#closeContactsPopup">closeContactsPopup</a></li><li><a href="global.html#closeEditPopup">closeEditPopup</a></li><li><a href="global.html#closeIncludeAddTask">closeIncludeAddTask</a></li><li><a href="global.html#closePopup">closePopup</a></li><li><a href="global.html#createContactElement">createContactElement</a></li><li><a href="global.html#createTaskElement">createTaskElement</a></li><li><a href="global.html#deleteContact">deleteContact</a></li><li><a href="global.html#displayTasks">displayTasks</a></li><li><a href="global.html#editContact">editContact</a></li><li><a href="global.html#fetchAccountsAndFillDropdown">fetchAccountsAndFillDropdown</a></li><li><a href="global.html#fetchAndDisplayContacts">fetchAndDisplayContacts</a></li><li><a href="global.html#fetchAwaitingFeedbackTotalTasks">fetchAwaitingFeedbackTotalTasks</a></li><li><a href="global.html#fetchDoneTotalTasks">fetchDoneTotalTasks</a></li><li><a href="global.html#fetchInProgressTotalTasks">fetchInProgressTotalTasks</a></li><li><a href="global.html#fetchInitialData">fetchInitialData</a></li><li><a href="global.html#fetchNextUpcomingDeadlineTask">fetchNextUpcomingDeadlineTask</a></li><li><a href="global.html#fetchTasks">fetchTasks</a></li><li><a href="global.html#fetchToBackend">fetchToBackend</a></li><li><a href="global.html#fetchToDoTotalTasks">fetchToDoTotalTasks</a></li><li><a href="global.html#fetchTotalTasks">fetchTotalTasks</a></li><li><a href="global.html#fetchUrgentTasks">fetchUrgentTasks</a></li><li><a href="global.html#filterAndRenderContacts">filterAndRenderContacts</a></li><li><a href="global.html#getConfigData">getConfigData</a></li><li><a href="global.html#getCsrfToken">getCsrfToken</a></li><li><a href="global.html#guestLogin">guestLogin</a></li><li><a href="global.html#hideLoader">hideLoader</a></li><li><a href="global.html#hideLogout">hideLogout</a></li><li><a href="global.html#importConfig">importConfig</a></li><li><a href="global.html#includeHTMLaddTask">includeHTMLaddTask</a></li><li><a href="global.html#loadConfig">loadConfig</a></li><li><a href="global.html#login">login</a></li><li><a href="global.html#loginUser">loginUser</a></li><li><a href="global.html#logout">logout</a></li><li><a href="global.html#onloadSummary">onloadSummary</a></li><li><a href="global.html#processAndDisplayContacts">processAndDisplayContacts</a></li><li><a href="global.html#registerUser">registerUser</a></li><li><a href="global.html#renderContactDetails">renderContactDetails</a></li><li><a href="global.html#renderLetterSection">renderLetterSection</a></li><li><a href="global.html#renderRigthSide">renderRigthSide</a></li><li><a href="global.html#resetButtons">resetButtons</a></li><li><a href="global.html#saveContact">saveContact</a></li><li><a href="global.html#saveNewContact">saveNewContact</a></li><li><a href="global.html#saveTokenAndRedirect">saveTokenAndRedirect</a></li><li><a href="global.html#searchTasks">searchTasks</a></li><li><a href="global.html#showContactActions">showContactActions</a></li><li><a href="global.html#showContactDetails">showContactDetails</a></li><li><a href="global.html#showLogout">showLogout</a></li><li><a href="global.html#tasksGlobal">tasksGlobal</a></li><li><a href="global.html#templateRightSide">templateRightSide</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.3</a> on Fri Jul 26 2024 13:29:44 GMT+0200 (Mitteleuropäische Sommerzeit)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
